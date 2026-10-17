@@ -1,0 +1,719 @@
+<title>Network Intrusion Analytics</title>
+<meta name="description" content="Machine learning analysis of 148,000 network connections from the NSL-KDD dataset, by Jolie Alshareef.">
+<style>
+/* Layout: Apple-style product page. Full-bleed alternating bands, centered 980px content column, big type, one dark story band. */
+:root{
+  --bg:#ffffff; --bg-alt:#f5f5f7; --tile:#ffffff; --fg:#1d1d1f; --fg-2:#6e6e73; --fg-3:#86868b;
+  --line:#d2d2d7; --accent:#0071e3; --accent-soft:rgba(0,113,227,.12);
+  --nav-bg:rgba(251,251,253,.8);
+  --band:#000000; --band-fg:#f5f5f7; --band-fg-2:#a1a1a6; --band-tile:#1d1d1f;
+  --normal:#d8d8de; --dos:#5e5ce6; --probe:#30b0c7; --r2l:#ff6482; --u2r:#bf5af2;
+  --caught:#0071e3; --missed:#ff3b30; --falsealarm:#ff9500; --quiet:#e6e6eb;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --radius:28px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --bg-alt:#101012; --tile:#1c1c1e; --fg:#f5f5f7; --fg-2:#a1a1a6; --fg-3:#8e8e93;
+  --line:#38383a; --accent:#2997ff; --accent-soft:rgba(41,151,255,.16);
+  --nav-bg:rgba(22,22,23,.8);
+  --band:#000000; --band-fg:#f5f5f7; --band-fg-2:#a1a1a6; --band-tile:#1c1c1e;
+  --normal:#3a3a3e; --dos:#7d7aff; --probe:#40c8e0; --r2l:#ff6482; --u2r:#da8fff;
+  --caught:#2997ff; --missed:#ff453a; --falsealarm:#ff9f0a; --quiet:#2a2a2d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#000000; --bg-alt:#101012; --tile:#1c1c1e; --fg:#f5f5f7; --fg-2:#a1a1a6; --fg-3:#8e8e93;
+  --line:#38383a; --accent:#2997ff; --accent-soft:rgba(41,151,255,.16);
+  --nav-bg:rgba(22,22,23,.8);
+  --band:#000000; --band-fg:#f5f5f7; --band-fg-2:#a1a1a6; --band-tile:#1c1c1e;
+  --normal:#3a3a3e; --dos:#7d7aff; --probe:#40c8e0; --r2l:#ff6482; --u2r:#da8fff;
+  --caught:#2997ff; --missed:#ff453a; --falsealarm:#ff9f0a; --quiet:#2a2a2d; color-scheme:dark}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:17px;line-height:1.47;letter-spacing:-.022em;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+
+/* nav */
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--nav-bg);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line)}
+.nav-in{max-width:1024px;margin:0 auto;padding:0 16px;height:52px;display:flex;align-items:center;gap:20px}
+.nav-title{font-size:19px;font-weight:600;color:var(--fg);white-space:nowrap;letter-spacing:-.02em}
+.nav-links{display:flex;gap:22px;margin-left:auto;overflow-x:auto;scrollbar-width:none;min-width:0}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{color:var(--fg-2);font-size:12px;white-space:nowrap}
+.nav-links a:hover{color:var(--fg);text-decoration:none}
+.pill-btn{background:var(--accent);color:#fff;font-size:12px;padding:5px 12px;border-radius:980px;white-space:nowrap}
+.pill-btn:hover{text-decoration:none;filter:brightness(1.08)}
+@media (max-width:640px){.nav-links{display:none}.nav-in{justify-content:space-between}}
+
+/* bands */
+.band{padding-block:96px;padding-inline:16px}
+.band.alt{background:var(--bg-alt)}
+.band.dark{background:var(--band);color:var(--band-fg)}
+.wrap{max-width:980px;margin:0 auto}
+.center{text-align:center}
+.eyebrow{font-size:21px;font-weight:600;color:var(--fg-2);margin:0 0 8px;letter-spacing:.004em}
+.dark .eyebrow{color:var(--band-fg-2)}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-size:clamp(44px,8vw,80px);line-height:1.05;font-weight:700;letter-spacing:-.015em}
+h2{font-size:clamp(36px,5.6vw,56px);line-height:1.07;font-weight:700;letter-spacing:-.005em}
+h3{font-size:24px;line-height:1.17;font-weight:600;letter-spacing:.009em}
+.lede{font-size:clamp(19px,2.4vw,24px);line-height:1.33;color:var(--fg-2);max-width:720px;margin:20px auto 0;font-weight:500;letter-spacing:.009em}
+.dark .lede{color:var(--band-fg-2)}
+.grad{background:linear-gradient(90deg,var(--accent),var(--u2r));-webkit-background-clip:text;background-clip:text;color:transparent}
+.cta{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;margin-top:24px;font-size:19px}
+.cta a::after{content:" ›"}
+.muted{color:var(--fg-2)}
+.small{font-size:14px;line-height:1.43;letter-spacing:-.016em}
+p{margin:0}
+.prose{max-width:680px;margin:0 auto}
+.prose p+p{margin-top:16px}
+
+/* hero */
+.hero{padding-top:72px;padding-bottom:64px}
+.mosaic-card{margin-top:56px;background:var(--tile);border-radius:var(--radius);padding:28px;box-shadow:0 2px 24px rgba(0,0,0,.06)}
+.dark-host .mosaic-card{box-shadow:none}
+.seg{display:inline-flex;background:var(--bg-alt);border-radius:980px;padding:3px;gap:2px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.seg::-webkit-scrollbar{display:none}
+.seg button{all:unset;cursor:pointer;font-size:14px;padding:7px 16px;border-radius:980px;color:var(--fg-2);white-space:nowrap;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--tile);color:var(--fg);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.seg button:focus-visible{outline:2px solid var(--accent)}
+.mosaic-top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.mosaic-cap{font-size:14px;color:var(--fg-2);min-height:20px}
+.mosaic-cap b{color:var(--fg);font-weight:600}
+canvas#mosaic{display:block;width:100%;margin-top:20px;border-radius:10px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:16px;font-size:13px;color:var(--fg-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:56px}
+.stat{text-align:center}
+.stat .n{font-size:clamp(34px,4.6vw,48px);font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .l{font-size:14px;color:var(--fg-2);margin-top:6px}
+@media (max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:56px}
+.tile{background:var(--tile);border-radius:var(--radius);padding:36px;min-width:0}
+.band:not(.alt):not(.dark) .tile{background:var(--bg-alt)}
+.dark .tile{background:var(--band-tile)}
+.tile.wide{grid-column:1/-1}
+.tile h3{margin-bottom:8px}
+@media (max-width:760px){.tiles{grid-template-columns:minmax(0,1fr)}.tile{padding:24px}}
+
+/* charts */
+.chart{width:100%;height:auto;display:block;margin-top:20px;overflow:visible}
+.chart text{fill:var(--fg-2);font-family:var(--font);font-size:12px}
+.chart .axis{stroke:var(--line)}
+.chart .grid{stroke:var(--line);stroke-dasharray:2 4}
+.dark .chart text{fill:var(--band-fg-2)}
+
+.bars{display:grid;gap:14px;margin-top:22px}
+.bar-row{display:grid;grid-template-columns:110px minmax(0,1fr) 56px;align-items:center;gap:12px;font-size:14px}
+.bar-row .track{height:10px;background:var(--bg-alt);border-radius:6px;overflow:hidden}
+.dark .bar-row .track{background:#2c2c2e}
+.band:not(.alt):not(.dark) .tile .bar-row .track{background:var(--bg)}
+.bar-row .fill{height:100%;border-radius:6px;transition:width .6s cubic-bezier(.3,.7,.2,1)}
+.bar-row .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+@media (prefers-reduced-motion: reduce){.bar-row .fill{transition:none}}
+
+/* model metrics */
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:28px}
+.metric .n{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;line-height:1.1}
+.metric .l{font-size:13px;color:var(--fg-2);margin-top:4px}
+@media (max-width:760px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;margin-top:20px;font-size:13px;font-variant-numeric:tabular-nums}
+.cm .h{color:var(--fg-2);padding:4px 8px;display:flex;align-items:center}
+.cm .c{border-radius:14px;padding:16px;text-align:left}
+.cm .c b{display:block;font-size:24px;font-weight:700}
+.cm .c span{color:var(--fg-2)}
+.model-desc{color:var(--fg-2);margin-top:6px;min-height:48px}
+
+/* big compare */
+.duel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:56px}
+.duel .tile{text-align:center;padding:44px 24px}
+.duel .big{font-size:clamp(64px,11vw,120px);font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.duel .who{font-size:21px;font-weight:600;margin-top:14px}
+.duel .what{color:var(--band-fg-2);margin-top:6px;font-size:15px}
+@media (max-width:640px){.duel{grid-template-columns:minmax(0,1fr)}}
+
+/* table */
+.tbl-wrap{overflow-x:auto;margin-top:24px}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:620px}
+th{text-align:left;font-weight:600;color:var(--band-fg-2);font-size:12px;padding:10px 8px;border-bottom:1px solid #38383a;white-space:nowrap}
+td{padding:10px 8px;border-bottom:1px solid #2c2c2e;vertical-align:middle}
+td.num{font-variant-numeric:tabular-nums;text-align:right}
+.mini{display:flex;align-items:center;gap:8px;min-width:120px}
+.mini .t{flex:1;height:6px;background:#2c2c2e;border-radius:4px;overflow:hidden}
+.mini .f{height:100%;border-radius:4px}
+.mini .p{width:40px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:980px;letter-spacing:.02em;white-space:nowrap}
+.chip.new{background:rgba(255,159,10,.18);color:#ff9f0a}
+
+/* features */
+.feat{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:56px;margin-top:56px;align-items:start}
+.feat-list{display:grid;gap:12px}
+.feat-row{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:12px;align-items:center;cursor:pointer;padding:10px 14px;border-radius:14px;border:0;background:none;color:inherit;font:inherit;text-align:left}
+.feat-row:hover,.feat-row[aria-pressed="true"]{background:var(--tile)}
+.feat-row .nm{font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+.feat-row .t{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.feat-row .f{height:100%;background:var(--accent);border-radius:4px}
+.feat-explain{position:sticky;top:90px;background:var(--tile);border-radius:var(--radius);padding:32px}
+.feat-explain .nm{font-family:var(--mono);font-size:15px;color:var(--accent)}
+.feat-explain .imp{font-size:48px;font-weight:700;margin-top:8px;font-variant-numeric:tabular-nums}
+@media (max-width:760px){.feat{grid-template-columns:minmax(0,1fr);gap:24px}.feat-explain{position:static;order:-1}}
+
+/* inspector */
+.insp{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:20px;margin-top:56px}
+.insp-list{background:var(--bg-alt);border-radius:var(--radius);padding:12px;max-height:620px;overflow-y:auto}
+.insp-item{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;padding:11px 14px;border-radius:14px;cursor:pointer;font-size:14px}
+.insp-item:hover{background:var(--tile)}
+.insp-item[aria-pressed="true"]{background:var(--tile);box-shadow:0 1px 6px rgba(0,0,0,.08)}
+.insp-item:focus-visible{outline:2px solid var(--accent)}
+.insp-item .nm{font-family:var(--mono);font-size:13px}
+.insp-group{font-size:12px;font-weight:600;color:var(--fg-2);padding:14px 14px 6px;letter-spacing:.02em}
+.insp-detail{background:var(--bg-alt);border-radius:var(--radius);padding:32px;min-width:0}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 20px;margin-top:22px}
+.kv div span{display:block;font-size:12px;color:var(--fg-2)}
+.kv div b{font-family:var(--mono);font-size:15px;font-weight:500;overflow-wrap:anywhere}
+.verdicts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:26px}
+.verdict{background:var(--tile);border-radius:18px;padding:18px}
+.verdict .who{font-size:12px;color:var(--fg-2)}
+.verdict .res{font-size:21px;font-weight:700;margin-top:4px}
+.verdict .sub{font-size:12px;color:var(--fg-2);margin-top:6px;font-variant-numeric:tabular-nums}
+.gauge{height:6px;background:var(--line);border-radius:4px;margin-top:10px;position:relative;overflow:visible}
+.gauge .f{height:100%;border-radius:4px}
+.gauge .th{position:absolute;top:-4px;width:2px;height:14px;background:var(--fg);border-radius:1px}
+.truth{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+@media (max-width:760px){.insp{grid-template-columns:minmax(0,1fr)}.insp-list{max-height:280px}.kv{grid-template-columns:repeat(2,minmax(0,1fr))}.verdicts{grid-template-columns:minmax(0,1fr)}}
+
+/* findings */
+.find{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:56px}
+.find .tile p{color:var(--fg-2);margin-top:10px}
+.find .k{font-size:44px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+@media (max-width:760px){.find{grid-template-columns:minmax(0,1fr)}}
+
+/* method */
+.steps{display:grid;gap:0;margin-top:48px;counter-reset:s}
+.step{display:grid;grid-template-columns:48px minmax(0,1fr);gap:16px;padding:22px 0;border-top:1px solid var(--line)}
+.step:last-child{border-bottom:1px solid var(--line)}
+.step .i{font-size:15px;color:var(--fg-3);font-variant-numeric:tabular-nums;padding-top:3px}
+.step h3{font-size:19px}
+.step p{color:var(--fg-2);margin-top:4px;font-size:15px}
+pre{background:var(--bg-alt);border-radius:18px;padding:20px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;margin-top:28px;color:var(--fg)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px;justify-content:center}
+.tools span{background:var(--bg-alt);border-radius:980px;padding:7px 14px;font-size:14px}
+
+footer{padding-block:40px;padding-inline:16px;font-size:12px;color:var(--fg-2);border-top:1px solid var(--line);background:var(--bg-alt)}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+</style>
+
+<nav class="nav" aria-label="Page">
+  <div class="nav-in">
+    <a class="nav-title" href="#top" style="color:var(--fg);text-decoration:none">Intrusion Analytics</a>
+    <div class="nav-links">
+      <a href="#data">Data</a><a href="#models">Models</a><a href="#unseen">New attacks</a><a href="#features">Features</a><a href="#inspector">Inspector</a><a href="#method">Method</a>
+    </div>
+    <a class="pill-btn" id="gh-btn" href="#method" hidden>View code</a>
+  </div>
+</nav>
+
+<main id="top">
+<!-- HERO -->
+<section class="band hero">
+  <div class="wrap center">
+    <p class="eyebrow">Network Intrusion Analytics</p>
+    <h1>Catch the attacks <span class="grad">nobody trained&nbsp;for.</span></h1>
+    <p class="lede">I trained machine learning models on 125,973 network connections, then tested them on 22,544 more, including 17 attack types the models had never seen.</p>
+    <div class="cta"><a href="#unseen">See what happened</a><a href="#method">How it was built</a></div>
+
+    <div class="mosaic-card" style="text-align:left">
+      <div class="mosaic-top">
+        <div class="seg" role="group" aria-label="Color the connections by">
+          <button type="button" data-mode="truth" aria-pressed="true">What really happened</button>
+          <button type="button" data-mode="rf" aria-pressed="false">Random Forest</button>
+          <button type="button" data-mode="iso" aria-pressed="false">Isolation Forest</button>
+          <button type="button" data-mode="hyb" aria-pressed="false">Layered</button>
+        </div>
+        <div class="mosaic-cap" id="mosaic-cap" aria-live="polite"></div>
+      </div>
+      <canvas id="mosaic" role="img" aria-label="Grid of all 22,544 test connections, one square each, colored by attack family or by model verdict."></canvas>
+      <div class="legend" id="legend"></div>
+      <p class="small muted" style="margin-top:12px">Each square is one connection from the test set, grouped by family.</p>
+    </div>
+
+    <div class="stats" id="stats"></div>
+  </div>
+</section>
+
+<!-- DATA -->
+<section class="band alt" id="data">
+  <div class="wrap">
+    <div class="center">
+      <p class="eyebrow">The data</p>
+      <h2>The test set doesn't look like the training set.</h2>
+      <p class="lede">NSL-KDD splits traffic into normal connections and four attack families. The test set is much heavier on remote-access attacks, which is what makes it hard.</p>
+    </div>
+    <div class="tiles">
+      <div class="tile wide">
+        <h3>Share of each family</h3>
+        <p class="muted small">Percent of connections in each split</p>
+        <div id="family-chart"></div>
+      </div>
+      <div class="tile">
+        <h3>Four kinds of attack</h3>
+        <div class="bars small" style="gap:16px;margin-top:18px">
+          <div><b style="color:var(--dos)">DoS</b>: flooding a service until it stops responding (neptune, smurf)</div>
+          <div><b style="color:var(--probe)">Probe</b>: scanning to map hosts and open ports (nmap, satan)</div>
+          <div><b style="color:var(--r2l)">R2L</b>: remote-to-local, gaining access from outside, like password guessing</div>
+          <div><b style="color:var(--u2r)">U2R</b>: user-to-root, escalating a normal account to admin</div>
+        </div>
+      </div>
+      <div class="tile">
+        <h3>Attack rate by protocol</h3>
+        <p class="muted small">Share of test connections that are attacks</p>
+        <div class="bars" id="proto-bars"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODELS -->
+<section class="band" id="models">
+  <div class="wrap">
+    <div class="center">
+      <p class="eyebrow">The models</p>
+      <h2>Four ways to flag an attack.</h2>
+      <p class="lede">Two supervised models learn from labeled examples. One anomaly detector learns only what normal looks like. The layered approach raises an alert when either the Random Forest or the anomaly detector does.</p>
+    </div>
+    <div style="text-align:center;margin-top:40px">
+      <div class="seg" role="group" aria-label="Choose a model" id="model-seg"></div>
+    </div>
+    <div class="tiles">
+      <div class="tile wide">
+        <h3 id="m-name"></h3>
+        <p class="model-desc" id="m-desc"></p>
+        <div class="metrics" id="m-metrics"></div>
+      </div>
+      <div class="tile">
+        <h3>Detection rate by family</h3>
+        <p class="muted small">Share of each family the model flagged</p>
+        <div class="bars" id="m-family"></div>
+      </div>
+      <div class="tile">
+        <h3>Confusion matrix</h3>
+        <p class="muted small">22,544 test connections</p>
+        <div class="cm" id="m-cm"></div>
+      </div>
+      <div class="tile wide">
+        <h3>ROC curve</h3>
+        <p class="muted small">Detection rate against false alarm rate as the alert threshold moves. Closer to the top-left corner is better.</p>
+        <div id="roc"></div>
+        <div class="legend" id="roc-legend"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- UNSEEN -->
+<section class="band dark" id="unseen">
+  <div class="wrap">
+    <div class="center">
+      <p class="eyebrow">New attacks</p>
+      <h2>Trained on 22 attack types.<br>Tested on 37.</h2>
+      <p class="lede">3,750 test connections came from attack types that never appeared in training. That's what a zero-day looks like to a detection system.</p>
+    </div>
+    <div class="duel" id="duel"></div>
+    <div class="tile" style="margin-top:20px">
+      <h3>Every attack type with 50+ test connections</h3>
+      <p class="small" style="color:var(--band-fg-2)">Detection rate per model. <span class="chip new">NEW</span> means the type never appeared in training.</p>
+      <div class="tbl-wrap"><table id="attack-table"></table></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="band alt" id="features">
+  <div class="wrap">
+    <div class="center">
+      <p class="eyebrow">What the model looks at</p>
+      <h2>Bytes and patterns, not payloads.</h2>
+      <p class="lede">These are the 12 features the Random Forest relied on most. Select one to see what it measures.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-list" id="feat-list"></div>
+      <div class="feat-explain" id="feat-explain" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- INSPECTOR -->
+<section class="band" id="inspector">
+  <div class="wrap">
+    <div class="center">
+      <p class="eyebrow">Connection inspector</p>
+      <h2>Pick a connection. See the verdict.</h2>
+      <p class="lede">These are real connections sampled from the test set, with each model's actual output.</p>
+    </div>
+    <div class="insp">
+      <div class="insp-list" id="insp-list" role="group" aria-label="Sample connections"></div>
+      <div class="insp-detail" id="insp-detail" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- FINDINGS -->
+<section class="band alt" id="findings">
+  <div class="wrap">
+    <div class="center">
+      <p class="eyebrow">Findings</p>
+      <h2>What the results say.</h2>
+    </div>
+    <div class="find" id="find"></div>
+  </div>
+</section>
+
+<!-- METHOD -->
+<section class="band" id="method">
+  <div class="wrap">
+    <div class="center">
+      <p class="eyebrow">Method</p>
+      <h2>How it was built.</h2>
+    </div>
+    <div class="prose">
+      <div class="steps">
+        <div class="step"><div class="i">1</div><div><h3>Load and label</h3><p>Read KDDTrain+ and KDDTest+, then mapped all 39 attack names to the four standard families (DoS, Probe, R2L, U2R).</p></div></div>
+        <div class="step"><div class="i">2</div><div><h3>Encode features</h3><p>One-hot encoded protocol, service and TCP flag, which took 41 raw features to 121 columns. Dropped one constant column. Aligned test columns to training columns.</p></div></div>
+        <div class="step"><div class="i">3</div><div><h3>Train three models</h3><p>Logistic Regression on scaled features as a baseline. Random Forest with 200 trees. Isolation Forest fitted only on normal training traffic, with 10% contamination.</p></div></div>
+        <div class="step"><div class="i">4</div><div><h3>Layer them</h3><p>Raised an alert when either the Random Forest or the Isolation Forest flagged a connection, the way a SOC runs signature and anomaly detection side by side.</p></div></div>
+        <div class="step"><div class="i">5</div><div><h3>Evaluate on held-out data</h3><p>Measured accuracy, precision, recall, false alarm rate and ROC AUC on the official test set, then split results by family and by seen versus unseen attack type.</p></div></div>
+      </div>
+      <pre>git clone &lt;repo&gt; &amp;&amp; cd network-intrusion-analytics
+pip install pandas scikit-learn
+python analysis.py        # writes results.json, about 20 seconds</pre>
+      <div class="tools"><span>Python</span><span>pandas</span><span>NumPy</span><span>scikit-learn</span><span>Random Forest</span><span>Isolation Forest</span><span>ROC analysis</span><span>HTML / CSS / JS</span></div>
+      <p class="small muted" style="margin-top:28px;text-align:center" id="repro"></p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span id="foot-name">Jolie Alshareef · Cybersecurity Analytics &amp; Operations, Penn State</span>
+    <span id="foot-links">Dataset: NSL-KDD, Canadian Institute for Cybersecurity</span>
+  </div>
+</footer>
+
+<script>
+/* ===== Edit these to add your links ===== */
+const PROFILE = {
+  github: "",    // e.g. "https://github.com/your-username/network-intrusion-analytics"
+  linkedin: ""   // e.g. "https://www.linkedin.com/in/your-name"
+};
+
+const R = __RESULTS__;
+const MOSAIC = "__MOSAIC__";
+
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString("en-US");
+const pct = (x, d = 0) => (x * 100).toFixed(d) + "%";
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const FAMS = ["Normal", "DoS", "Probe", "R2L", "U2R"];
+const FAMVAR = {Normal: "--normal", DoS: "--dos", Probe: "--probe", R2L: "--r2l", U2R: "--u2r"};
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const M = R.models;
+const KEYS = {rf: "Random Forest", iso: "Isolation Forest", hyb: "Layered (RF + IF)", lr: "Logistic Regression"};
+
+/* profile links */
+if (PROFILE.github) { const b = $("#gh-btn"); b.href = PROFILE.github; b.target = "_blank"; b.rel = "noopener"; b.hidden = false; }
+if (PROFILE.linkedin) $("#foot-name").innerHTML += ` · <a href="${PROFILE.linkedin}" target="_blank" rel="noopener">LinkedIn</a>`;
+
+/* ===== stats ===== */
+const ov = R.overview;
+$("#stats").innerHTML = [
+  [fmt(ov.train_rows), "training connections"],
+  [fmt(ov.test_rows), "test connections"],
+  [ov.features_raw, "traffic features"],
+  [ov.unseen_attack_types.length, "attack types only in test"]
+].map(([n, l]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+/* ===== mosaic ===== */
+const cells = Array.from(MOSAIC, ch => {
+  const c = ch.charCodeAt(0) - 48;
+  return {fam: c >> 3, rf: (c >> 2) & 1, iso: (c >> 1) & 1, unseen: c & 1};
+});
+const canvas = $("#mosaic"), ctx = canvas.getContext("2d");
+let mode = "truth", shown = null, anim = null;
+
+function cellColor(c, m, P) {
+  if (m === "truth") return P[FAMS[c.fam]];
+  const flag = m === "rf" ? c.rf : m === "iso" ? c.iso : (c.rf | c.iso);
+  if (c.fam === 0) return flag ? P.falsealarm : P.quiet;
+  return flag ? P.caught : P.missed;
+}
+function palette() {
+  const P = {};
+  FAMS.forEach(f => P[f] = css(FAMVAR[f]));
+  ["caught", "missed", "falsealarm", "quiet"].forEach(k => P[k] = css("--" + k));
+  return P;
+}
+let layout = null;
+function sizeMosaic() {
+  const w = canvas.clientWidth || 900;
+  const pitch = w < 500 ? 3 : w < 760 ? 4 : 5;
+  const cols = Math.floor(w / pitch);
+  const rows = Math.ceil(cells.length / cols);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = cols * pitch * dpr; canvas.height = rows * pitch * dpr;
+  canvas.style.height = rows * pitch + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  layout = {pitch, cols, gap: pitch >= 4 ? 1 : 0.6};
+}
+function drawMosaic(m, upto = cells.length, from = null) {
+  const P = palette(), {pitch, cols, gap} = layout, s = pitch - gap;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < cells.length; i++) {
+    const useNew = i < upto;
+    ctx.fillStyle = cellColor(cells[i], useNew || !from ? m : from, P);
+    ctx.fillRect((i % cols) * pitch, Math.floor(i / cols) * pitch, s, s);
+  }
+}
+function setMode(m) {
+  const prev = mode; mode = m;
+  document.querySelectorAll(".mosaic-card .seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === m));
+  renderLegend(); renderCaption();
+  if (anim) cancelAnimationFrame(anim);
+  if (reduce || prev === m) { drawMosaic(m); return; }
+  const t0 = performance.now(), dur = 700;
+  const step = t => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    drawMosaic(m, Math.floor(e * cells.length), prev);
+    if (k < 1) anim = requestAnimationFrame(step);
+  };
+  anim = requestAnimationFrame(step);
+}
+function renderLegend() {
+  const items = mode === "truth"
+    ? FAMS.map(f => [FAMVAR[f], f === "Normal" ? "Normal traffic" : f])
+    : [["--caught", "Attack caught"], ["--missed", "Attack missed"], ["--falsealarm", "False alarm"], ["--quiet", "Normal, no alert"]];
+  $("#legend").innerHTML = items.map(([v, l]) => `<span><i class="sw" style="background:var(${v})"></i>${l}</span>`).join("");
+}
+function renderCaption() {
+  const att = cells.filter(c => c.fam > 0).length;
+  if (mode === "truth") {
+    $("#mosaic-cap").innerHTML = `<b>${fmt(att)}</b> attacks among <b>${fmt(cells.length)}</b> connections`;
+    return;
+  }
+  const f = c => mode === "rf" ? c.rf : mode === "iso" ? c.iso : (c.rf | c.iso);
+  const caught = cells.filter(c => c.fam > 0 && f(c)).length;
+  const fa = cells.filter(c => c.fam === 0 && f(c)).length;
+  $("#mosaic-cap").innerHTML = `Caught <b>${fmt(caught)}</b> of ${fmt(att)} attacks · <b>${fmt(fa)}</b> false alarms`;
+}
+document.querySelectorAll(".mosaic-card .seg button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+/* ===== family share chart ===== */
+function familyChart() {
+  const fc = ov.family_counts, W = Math.max(320, $("#family-chart").clientWidth || 860), rowH = 46, top = 8, left = 70, H = top + FAMS.length * rowH + 30;
+  const tot = s => Object.values(fc[s]).reduce((a, b) => a + b, 0);
+  const share = (s, f) => fc[s][f] / tot(s);
+  const max = 0.6, x = v => left + (v / max) * (W - left - 86);
+  let g = "";
+  [0, .2, .4, .6].forEach(t => g += `<line class="grid" x1="${x(t)}" x2="${x(t)}" y1="${top}" y2="${H - 24}"/><text x="${x(t)}" y="${H - 6}" text-anchor="middle">${pct(t)}</text>`);
+  FAMS.forEach((f, i) => {
+    const y = top + i * rowH;
+    g += `<text x="0" y="${y + 21}" style="font-weight:600;fill:var(--fg)">${f}</text>`;
+    [["train", 0, .45], ["test", 1, 1]].forEach(([s, j, op]) => {
+      const v = share(s, f), yy = y + 4 + j * 17;
+      g += `<rect x="${left}" y="${yy}" width="${Math.max(2, x(v) - left)}" height="14" rx="4" fill="var(${FAMVAR[f]})" opacity="${op}"/>`;
+      g += `<text x="${x(v) + 8}" y="${yy + 11}">${pct(v, 1)} ${s}</text>`;
+    });
+  });
+  $("#family-chart").innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Share of each family in training and test sets">${g}</svg>`;
+}
+
+/* ===== protocol bars ===== */
+function bars(el, rows) {
+  el.innerHTML = rows.map(([l, v, color]) =>
+    `<div class="bar-row"><span>${l}</span><div class="track"><div class="fill" style="width:${(v * 100).toFixed(1)}%;background:${color}"></div></div><span class="v">${pct(v)}</span></div>`).join("");
+}
+
+/* ===== models ===== */
+const DESC = {
+  "Logistic Regression": "A simple linear model, used as the baseline. Few false alarms, but it misses many attacks.",
+  "Random Forest": "200 decision trees voting together. The most precise model, but it struggles with attack types it never saw.",
+  "Isolation Forest": "Unsupervised. It learned only what normal traffic looks like and flags anything unusual. It never saw a single labeled attack.",
+  "Layered (RF + IF)": "Alerts when either model flags a connection. This catches the most attacks for a small rise in false alarms."
+};
+const ORDER = ["Random Forest", "Isolation Forest", "Layered (RF + IF)", "Logistic Regression"];
+let current = "Layered (RF + IF)";
+$("#model-seg").innerHTML = ORDER.map(k => `<button type="button" data-k="${k}" aria-pressed="${k === current}">${k.replace(" (RF + IF)", "")}</button>`).join("");
+document.querySelectorAll("#model-seg button").forEach(b => b.addEventListener("click", () => { current = b.dataset.k; renderModel(); }));
+
+function renderModel() {
+  const m = M[current];
+  document.querySelectorAll("#model-seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === current));
+  $("#m-name").textContent = current;
+  $("#m-desc").textContent = DESC[current];
+  const tiles = [
+    [pct(m.recall), "Detection rate (recall)"],
+    [pct(m.false_positive_rate, 1), "False alarm rate"],
+    [pct(m.precision), "Precision"],
+    [m.roc_auc != null ? m.roc_auc.toFixed(3) : pct(m.accuracy), m.roc_auc != null ? "ROC AUC" : "Accuracy"]
+  ];
+  $("#m-metrics").innerHTML = tiles.map(([n, l]) => `<div class="metric"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  const fr = m.family_recall;
+  if (fr) {
+    bars($("#m-family"), ["DoS", "Probe", "R2L", "U2R"].map(f => [f, fr[f], `var(${FAMVAR[f]})`])
+      .concat([["Normal*", fr["Normal (false alarm rate)"], "var(--falsealarm)"]]));
+    $("#m-family").insertAdjacentHTML("beforeend", `<p class="small muted">*Normal shows the false alarm rate.</p>`);
+  } else {
+    $("#m-family").innerHTML = `<p class="muted small">Per-family results were computed for the Random Forest, Isolation Forest and layered models.</p>`;
+  }
+  const c = m.confusion;
+  $("#m-cm").innerHTML = `
+    <div></div><div class="h">Flagged</div><div class="h">Not flagged</div>
+    <div class="h">Attack</div>
+    <div class="c" style="background:var(--accent-soft)"><b>${fmt(c.tp)}</b><span>caught</span></div>
+    <div class="c" style="background:color-mix(in srgb, var(--missed) 14%, transparent)"><b>${fmt(c.fn)}</b><span>missed</span></div>
+    <div class="h">Normal</div>
+    <div class="c" style="background:color-mix(in srgb, var(--falsealarm) 16%, transparent)"><b>${fmt(c.fp)}</b><span>false alarms</span></div>
+    <div class="c" style="background:var(--bg-alt)"><b>${fmt(c.tn)}</b><span>correctly ignored</span></div>`;
+}
+
+/* ===== ROC ===== */
+function roc() {
+  const W = Math.max(320, $("#roc").clientWidth || 860), H = W < 500 ? 260 : 340, L = 44, B = 30, T = 10, Rr = 10;
+  const x = v => L + v * (W - L - Rr), y = v => T + (1 - v) * (H - T - B);
+  const lines = [["Random Forest", "--accent"], ["Isolation Forest", "--u2r"], ["Logistic Regression", "--fg-3"]];
+  let g = "";
+  [0, .25, .5, .75, 1].forEach(t => {
+    g += `<line class="grid" x1="${x(0)}" x2="${x(1)}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${pct(t)}</text>`;
+    g += `<text x="${x(t)}" y="${H - 8}" text-anchor="middle">${pct(t)}</text>`;
+  });
+  g += `<line x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}" stroke="var(--line)" stroke-dasharray="4 4"/>`;
+  lines.forEach(([k, v]) => {
+    const d = M[k].roc.map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
+    g += `<path d="${d}" fill="none" stroke="var(${v})" stroke-width="2.5" stroke-linejoin="round"/>`;
+  });
+  $("#roc").innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="ROC curves for three models">${g}</svg>`;
+  $("#roc-legend").innerHTML = lines.map(([k, v]) => `<span><i class="sw" style="background:var(${v})"></i>${k} · AUC ${M[k].roc_auc.toFixed(3)}</span>`).join("")
+    + `<span class="muted">x: false alarm rate · y: detection rate</span>`;
+}
+
+/* ===== unseen duel + table ===== */
+function unseen() {
+  const rf = M["Random Forest"].seen_unseen, iso = M["Isolation Forest"].seen_unseen, h = M["Layered (RF + IF)"].seen_unseen;
+  $("#duel").innerHTML = `
+    <div class="tile"><div class="big" style="color:var(--missed)">${pct(rf.unseen)}</div><div class="who">Random Forest</div><div class="what">of new attacks caught<br>(${pct(rf.seen)} on attack types it had seen)</div></div>
+    <div class="tile"><div class="big grad">${pct(iso.unseen)}</div><div class="who">Isolation Forest</div><div class="what">of new attacks caught<br>with no attack labels at all</div></div>`;
+  const mini = (v, col) => `<div class="mini"><div class="t"><div class="f" style="width:${v * 100}%;background:${col}"></div></div><span class="p">${pct(v)}</span></div>`;
+  $("#attack-table").innerHTML = `<thead><tr><th>Attack</th><th>Family</th><th style="text-align:right">Test rows</th><th>Random Forest</th><th>Isolation Forest</th><th>Layered</th></tr></thead><tbody>` +
+    R.per_attack.map(r => `<tr>
+      <td><span style="font-family:var(--mono);font-size:13px">${r.attack}</span> ${r.unseen ? '<span class="chip new">NEW</span>' : ""}</td>
+      <td><span style="color:var(${FAMVAR[r.family]});font-weight:600">${r.family}</span></td>
+      <td class="num">${fmt(r.rows)}</td>
+      <td>${mini(r.rf_recall, "var(--accent)")}</td><td>${mini(r.iso_recall, "var(--u2r)")}</td><td>${mini(r.hyb_recall, "#f5f5f7")}</td></tr>`).join("") + `</tbody>`;
+}
+
+/* ===== features ===== */
+const FEX = {
+  dst_bytes: "Bytes sent from the server back to the client. Floods and scans usually get tiny or empty responses.",
+  src_bytes: "Bytes sent from the client to the server. Many attacks send oddly small or oddly large requests.",
+  flag_SF: "Whether the TCP connection completed normally (SF = normal establishment and termination). Half-open SYN floods never reach SF.",
+  same_srv_rate: "Of the recent connections to the same host, the share that used the same service. Port scans push this down.",
+  dst_host_same_srv_rate: "The same idea over the last 100 connections to this destination host.",
+  dst_host_srv_count: "How many of the last 100 connections to this host used the same service.",
+  diff_srv_rate: "Of recent connections to the same host, the share that hit different services. High values point to scanning.",
+  dst_host_srv_serror_rate: "Share of recent connections to this host and service that hit a SYN error. The fingerprint of a SYN flood.",
+  count: "Connections to the same host in the past two seconds. Floods drive this into the hundreds.",
+  dst_host_serror_rate: "Share of recent connections to this host that hit a SYN error.",
+  dst_host_diff_srv_rate: "Share of the last 100 connections to this host that used a different service.",
+  logged_in: "Whether the connection included a successful login. Most floods and scans never log in."
+};
+let featSel = 0;
+function features() {
+  const max = R.top_features[0].importance;
+  $("#feat-list").innerHTML = R.top_features.map((f, i) =>
+    `<button type="button" class="feat-row" data-i="${i}" aria-pressed="${i === featSel}"><span class="nm">${f.feature}</span><span class="t"><span class="f" style="display:block;width:${(f.importance / max) * 100}%"></span></span></button>`).join("");
+  document.querySelectorAll(".feat-row").forEach(b => b.addEventListener("click", () => { featSel = +b.dataset.i; features(); }));
+  const f = R.top_features[featSel];
+  $("#feat-explain").innerHTML = `<div class="nm">${f.feature}</div><div class="imp">${pct(f.importance, 1)}</div><p class="muted small">of the Random Forest's total feature importance</p><p style="margin-top:18px">${FEX[f.feature] || ""}</p>`;
+}
+
+/* ===== inspector ===== */
+let sel = 0;
+const samples = R.samples;
+function inspector() {
+  const groups = [["Normal traffic", s => s.family === "Normal"], ["Known attacks", s => s.family !== "Normal" && !s.unseen], ["New attack types", s => s.unseen]];
+  let html = "";
+  groups.forEach(([g, fn]) => {
+    html += `<div class="insp-group">${g}</div>`;
+    samples.forEach((s, i) => { if (fn(s)) html += `<button type="button" class="insp-item" data-i="${i}" aria-pressed="${i === sel}"><span class="nm">${s.label}</span><span class="chip" style="background:color-mix(in srgb, var(${FAMVAR[s.family]}) 22%, transparent);color:var(--fg)">${s.family}</span></button>`; });
+  });
+  $("#insp-list").innerHTML = html;
+  document.querySelectorAll(".insp-item").forEach(b => b.addEventListener("click", () => { sel = +b.dataset.i; inspector(); }));
+  const s = samples[sel], isAttack = s.family !== "Normal";
+  const rfFlag = s.rf_prob >= 0.5, isoFlag = !!s.iso_flag, hyb = rfFlag || isoFlag;
+  const verdict = (flag) => {
+    const right = flag === isAttack;
+    const txt = flag ? "Attack" : "Normal";
+    return `<div class="res" style="color:${right ? "var(--fg)" : "var(--missed)"}">${txt}</div><div class="sub">${right ? "Correct" : (flag ? "False alarm" : "Missed")}</div>`;
+  };
+  $("#insp-detail").innerHTML = `
+    <div class="truth"><h3 style="font-family:var(--mono);font-weight:600">${s.label}</h3>
+      <span class="chip" style="background:color-mix(in srgb, var(${FAMVAR[s.family]}) 22%, transparent);color:var(--fg)">${s.family}</span>
+      ${s.unseen ? '<span class="chip new">NEW TYPE</span>' : ""}</div>
+    <p class="muted small" style="margin-top:6px">Test connection #${s.id} · ground truth: ${isAttack ? "attack" : "normal traffic"}</p>
+    <div class="kv">
+      <div><span>Protocol</span><b>${s.protocol}</b></div>
+      <div><span>Service</span><b>${s.service}</b></div>
+      <div><span>TCP flag</span><b>${s.flag}</b></div>
+      <div><span>Bytes sent</span><b>${fmt(s.src_bytes)}</b></div>
+      <div><span>Bytes received</span><b>${fmt(s.dst_bytes)}</b></div>
+      <div><span>Duration</span><b>${s.duration}s</b></div>
+      <div><span>Conns to host, 2s</span><b>${s.count}</b></div>
+      <div><span>SYN error rate</span><b>${pct(s.serror_rate)}</b></div>
+      <div><span>Same-service rate</span><b>${pct(s.same_srv_rate)}</b></div>
+    </div>
+    <div class="verdicts">
+      <div class="verdict"><div class="who">Random Forest</div>${verdict(rfFlag)}
+        <div class="gauge" aria-hidden="true"><div class="f" style="width:${s.rf_prob * 100}%;background:var(--accent)"></div><div class="th" style="left:50%"></div></div>
+        <div class="sub">Attack probability ${pct(s.rf_prob)} · alert at 50%</div></div>
+      <div class="verdict"><div class="who">Isolation Forest</div>${verdict(isoFlag)}
+        <div class="sub">Anomaly score ${s.iso_score.toFixed(3)}</div></div>
+      <div class="verdict"><div class="who">Layered</div>${verdict(hyb)}
+        <div class="sub">Alerts if either model flags</div></div>
+    </div>`;
+}
+
+/* ===== findings ===== */
+function findings() {
+  const rf = M["Random Forest"], h = M["Layered (RF + IF)"], iso = M["Isolation Forest"];
+  const gp = R.per_attack.find(r => r.attack === "guess_passwd");
+  const F = [
+    [pct(h.recall), "Layering beats any single model", `The layered approach caught ${pct(h.recall)} of attacks, against ${pct(rf.recall)} for the Random Forest alone. False alarms rose from ${pct(rf.false_positive_rate, 1)} to ${pct(h.false_positive_rate, 1)}. A SOC makes this same trade-off by running signature and anomaly detection together.`],
+    [rf.roc_auc.toFixed(2), "The Random Forest's threshold is too strict", `Its ROC AUC of ${rf.roc_auc.toFixed(3)} means it ranks attacks well, but at the default 50% cutoff it misses ${fmt(rf.confusion.fn)} of them. Lowering the threshold would trade a few false alarms for far more detections.`],
+    [pct(gp.rf_recall), "Password guessing is invisible at this level", `The models caught almost none of the ${fmt(gp.rows)} guess_passwd connections. At the connection level they look like ordinary logins. Catching them needs host logs like Windows event 4625, which is where a SIEM comes in.`],
+    [pct(iso.family_recall.U2R), "Anomaly detection finds the rare attacks", `The Random Forest caught ${pct(rf.family_recall.U2R)} of privilege-escalation (U2R) attacks, because training had only 52 examples. The Isolation Forest caught ${pct(iso.family_recall.U2R)} without any labels.`]
+  ];
+  $("#find").innerHTML = F.map(([k, t, p]) => `<div class="tile"><div class="k">${k}</div><h3 style="margin-top:6px">${t}</h3><p>${p}</p></div>`).join("");
+  $("#repro").textContent = `Results generated with scikit-learn ${R.sklearn_version}, random seed 42. The full run took ${R.runtime_seconds} seconds.`;
+}
+
+/* ===== boot ===== */
+function boot() {
+  sizeMosaic(); setMode("truth");
+  familyChart();
+  bars($("#proto-bars"), Object.entries(ov.protocol_attack_rate).map(([p, v]) => [p.toUpperCase(), v, "var(--accent)"]));
+  renderModel(); roc(); unseen(); features(); inspector(); findings();
+}
+boot();
+let rT;
+addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(() => { sizeMosaic(); drawMosaic(mode); familyChart(); roc(); }, 120); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => drawMosaic(mode));
+new MutationObserver(() => drawMosaic(mode)).observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+</script>
