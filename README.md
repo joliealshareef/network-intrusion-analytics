@@ -2,7 +2,7 @@
 
 Machine learning analysis of the NSL-KDD intrusion detection dataset. It compares supervised detection (Random Forest, Logistic Regression), unsupervised anomaly detection (Isolation Forest), and a layered approach that combines them. It pays particular attention to how each one handles **attack types that never appeared in training**.
 
-**Live site:** _add your link here_
+**Live site:** https://joliealshareef.github.io/network-intrusion-analytics/
 **Author:** Jolie Alshareef · B.S. Cybersecurity Analytics & Operations, Penn State
 
 ## Key results (KDDTest+, 22,544 connections)
@@ -36,11 +36,11 @@ python build_site.py   # builds index.html from site_template.html
 | `analysis.py` | Data loading, feature encoding, model training and evaluation |
 | `results.json` | Every number shown on the site |
 | `mosaic.txt` | One character per test connection (family + model verdicts) for the hero graphic |
-| `site_template.html` | The website, with placeholders for the data |
+| `site_template.html` | Website source; data is injected at build time |
 | `build_site.py` | Injects the results into the template, producing `index.html` |
 | `index.html` | The finished, self-contained website |
 
-To add your GitHub and LinkedIn buttons, edit the `PROFILE` block near the top of the `<script>` in `site_template.html`, then run `build_site.py` again.
+Profile links live in the `PROFILE` block at the top of the `<script>` in `site_template.html`.
 
 ## Limitations
 
